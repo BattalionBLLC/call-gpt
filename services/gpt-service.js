@@ -4,7 +4,6 @@ const OpenAI = require('openai');
 const tools = require('../functions/function-manifest');
 
 // Import all functions included in function manifest
-// Note: the function name and file name must be the same
 const availableFunctions = {};
 tools.forEach((tool) => {
   let functionName = tool.function.name;
@@ -18,17 +17,31 @@ class GptService extends EventEmitter {
     this.userContext = [
       {
         role: 'system',
-        content:
-          "You are a courteous but efficient virtual assistant for Battalion Logistics, a logistics and export services company. Your job is to quickly assess whether the caller needs export help or something else. If the caller asks for a quote, determine: • what product they want to export • the quantity or type • the destination • and their current location (especially if it’s vague like 'Augusta' — ask which state or country). • Confirm the company name and callback number. Keep responses brief but helpful. Politely disengage if the caller is clearly soliciting a sale or unrelated services. Insert the '•' symbol every 5 to 10 words for natural pauses."
+        content: `You are Morgan, a polite and efficient virtual assistant for Battalion Logistics.
+You handle voice calls professionally, helping callers determine if they need import/export logistics or procurement services.
+You always aim to:
+- Confirm the purpose of the call.
+- Extract meaningful information such as product type, origin location (not just caller location), destination, and urgency.
+- Capture caller's name, company name, and callback number.
+- Repeat the callback number back for clarity.
+- End sales calls or irrelevant inquiries politely but firmly.
+
+Use clear, friendly language with short responses and a professional tone.
+Add a '•' symbol every 5–10 words at natural pauses to allow for text-to-speech breaks.`
+      },
+      {
+        role: 'assistant',
+        content: `Hi, this is Morgan with Battalion Logistics. • How can I assist you today?`
       }
     ];
     this.partialResponseIndex = 0;
   }
 
-  // Add the callSid to the chat context in case
-  // ChatGPT decides to transfer the call.
   setCallSid(callSid) {
-    this.userContext.push({ role: 'system', content: `callSid: ${callSid}` });
+    this.userContext.push({
+      role: 'system',
+      content: `callSid: ${callSid}`
+    });
   }
 
   validateFunctionArgs(args) {
@@ -36,17 +49,17 @@ class GptService extends EventEmitter {
       return JSON.parse(args);
     } catch (error) {
       console.log('Warning: Double function arguments returned by OpenAI:', args);
-      if (args.indexOf('{') != args.lastIndexOf('{')) {
-        return JSON.parse(args.substring(args.indexOf(''), args.indexOf('}') + 1));
+      if (args.indexOf('{') !== args.lastIndexOf('{')) {
+        return JSON.parse(args.substring(args.indexOf('{'), args.indexOf('}') + 1));
       }
     }
   }
 
   updateUserContext(name, role, text) {
     if (name !== 'user') {
-      this.userContext.push({ role: role, name: name, content: text });
+      this.userContext.push({ role, name, content: text });
     } else {
-      this.userContext.push({ role: role, content: text });
+      this.userContext.push({ role, content: text });
     }
   }
 
@@ -58,7 +71,7 @@ class GptService extends EventEmitter {
       messages: this.userContext,
       tools: tools,
       stream: true,
-      max_tokens: 150,
+      max_tokens: 200,
       temperature: 0.7,
     });
 
@@ -69,14 +82,10 @@ class GptService extends EventEmitter {
     let finishReason = '';
 
     function collectToolInformation(deltas) {
-      let name = deltas.tool_calls?.[0]?.function?.name || '';
-      if (name != '') {
-        functionName = name;
-      }
-      let args = deltas.tool_calls?.[0]?.function?.arguments || '';
-      if (args != '') {
-        functionArgs += args;
-      }
+      let name = deltas.tool_calls[0]?.function?.name || '';
+      if (name) functionName = name;
+      let args = deltas.tool_calls[0]?.function?.arguments || '';
+      if (args) functionArgs += args;
     }
 
     for await (const chunk of stream) {
@@ -95,17 +104,12 @@ class GptService extends EventEmitter {
         const toolData = tools.find(tool => tool.function.name === functionName);
         const say = toolData.function.say;
 
-        this.emit(
-          'gptreply',
-          {
-            partialResponseIndex: null,
-            partialResponse: say,
-          },
-          interactionCount
-        );
+        this.emit('gptreply', {
+          partialResponseIndex: null,
+          partialResponse: say
+        }, interactionCount);
 
         let functionResponse = await functionToCall(validatedArgs);
-
         this.updateUserContext(functionName, 'function', functionResponse);
         await this.completion(functionResponse, interactionCount, 'function', functionName);
       } else {
@@ -113,12 +117,11 @@ class GptService extends EventEmitter {
         partialResponse += content;
 
         if (content.trim().slice(-1) === '•' || finishReason === 'stop') {
-          const gptReply = {
+          this.emit('gptreply', {
             partialResponseIndex: this.partialResponseIndex,
-            partialResponse,
-          };
+            partialResponse
+          }, interactionCount);
 
-          this.emit('gptreply', gptReply, interactionCount);
           this.partialResponseIndex++;
           partialResponse = '';
         }
