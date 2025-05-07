@@ -15,53 +15,18 @@ class GptService extends EventEmitter {
   constructor() {
     super();
     this.openai = new OpenAI();
-  this.userContext = [
-  {
-    role: 'system',
-    content: `You are a professional voice assistant for Battalion Logistics, a company that helps clients source, purchase, and export goods. You answer inbound calls from potential customers and business contacts. Your tone is polite, clear, efficient, and confident — like a helpful receptionist or executive assistant.
-
-Your main goal is to quickly understand the reason for the call and either:
-1. Assist the caller with a service inquiry (procurement, shipping, exporting)
-2. Collect contact information and export needs for follow-up
-3. Politely end the call if the person is a solicitor, irrelevant, or a wrong number
-
-When callers describe what they need, confirm it briefly using specific language. For example, if they say they want to export cleaning supplies to Trinidad, respond with something like: “Got it — you're looking to export cleaning supplies to Trinidad, correct?”
-
-❗️If the caller already provides their name, company name, export product, and destination — do **not** ask again. Instead, confidently repeat back what you understood to confirm. Then ask only for any **missing** info (such as their callback number). Example:
-
-“Thanks, Justine. That’s T.Bay Supplies in Augusta, looking to export cleaning supplies to Trinidad. May I please get your callback number so we can follow up with a quote?”
-
-Avoid vague phrases like “Let me make sure I understand.” Use:
-- “Just to confirm…”
-- “Sounds like you're trying to…”
-- “You’d like to…”
-
-If the caller is interested in services but has not shared key info:
-- Ask for their name and company
-- Ask what they’re looking to procure or export
-- Ask the destination country
-- Ask for a callback number, and repeat it clearly to confirm
-
-If the caller is unclear, you can ask:
-- “Can I ask — are you looking for a quote, or to arrange export?”
-
-If the caller is selling something, say:
-- “Thank you, but we’re not accepting sales inquiries at this time.”
-
-Once all info is received, **repeat it back to confirm**, and say something like:
-- “We’ll review your request and call you back shortly. Thanks for calling Battalion Logistics — talk soon.”
-
-Keep responses short, professional, and human-like.
-Do not ramble or ask more than one question at a time.
-Avoid repeating questions if the information was already shared.
-Do not act like a chatbot — sound like a capable human assistant.`
-  }
-];
-
+    this.userContext = [
+      {
+        role: 'system',
+        content:
+          "You are a courteous but efficient virtual assistant for Battalion Logistics, a logistics and export services company. Your job is to quickly assess whether the caller needs export help or something else. If the caller asks for a quote, determine: • what product they want to export • the quantity or type • the destination • and their current location (especially if it’s vague like 'Augusta' — ask which state or country). • Confirm the company name and callback number. Keep responses brief but helpful. Politely disengage if the caller is clearly soliciting a sale or unrelated services. Insert the '•' symbol every 5 to 10 words for natural pauses."
+      }
+    ];
     this.partialResponseIndex = 0;
   }
 
-  // Add the callSid to the chat context in case ChatGPT decides to transfer the call.
+  // Add the callSid to the chat context in case
+  // ChatGPT decides to transfer the call.
   setCallSid(callSid) {
     this.userContext.push({ role: 'system', content: `callSid: ${callSid}` });
   }
@@ -71,7 +36,6 @@ Do not act like a chatbot — sound like a capable human assistant.`
       return JSON.parse(args);
     } catch (error) {
       console.log('Warning: Double function arguments returned by OpenAI:', args);
-      // Seeing an error where sometimes we have two sets of args
       if (args.indexOf('{') != args.lastIndexOf('{')) {
         return JSON.parse(args.substring(args.indexOf(''), args.indexOf('}') + 1));
       }
@@ -89,7 +53,6 @@ Do not act like a chatbot — sound like a capable human assistant.`
   async completion(text, interactionCount, role = 'user', name = 'user') {
     this.updateUserContext(name, role, text);
 
-    // Step 1: Send user transcription to Chat GPT
     const stream = await this.openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: this.userContext,
@@ -112,7 +75,6 @@ Do not act like a chatbot — sound like a capable human assistant.`
       }
       let args = deltas.tool_calls?.[0]?.function?.arguments || '';
       if (args != '') {
-        // args are streamed as JSON string so we need to concatenate all chunks
         functionArgs += args;
       }
     }
@@ -122,44 +84,38 @@ Do not act like a chatbot — sound like a capable human assistant.`
       let deltas = chunk.choices[0].delta;
       finishReason = chunk.choices[0].finish_reason;
 
-      // Step 2: check if GPT wanted to call a function
       if (deltas.tool_calls) {
-        // Step 3: Collect the tokens containing function data
         collectToolInformation(deltas);
       }
 
-      // need to call function on behalf of Chat GPT with the arguments it parsed from the conversation
       if (finishReason === 'tool_calls') {
-        // parse JSON string of args into JSON object
         const functionToCall = availableFunctions[functionName];
         const validatedArgs = this.validateFunctionArgs(functionArgs);
 
-        // Say a pre-configured message from the function manifest before running the function
         const toolData = tools.find(tool => tool.function.name === functionName);
         const say = toolData.function.say;
 
-        this.emit('gptreply', {
-          partialResponseIndex: null,
-          partialResponse: say
-        }, interactionCount);
+        this.emit(
+          'gptreply',
+          {
+            partialResponseIndex: null,
+            partialResponse: say,
+          },
+          interactionCount
+        );
 
         let functionResponse = await functionToCall(validatedArgs);
 
-        // Step 4: send the info on the function call and function response to GPT
         this.updateUserContext(functionName, 'function', functionResponse);
-
-        // call the completion function again but pass in the function response to have OpenAI generate a new assistant response
         await this.completion(functionResponse, interactionCount, 'function', functionName);
       } else {
-        // We use completeResponse for userContext
         completeResponse += content;
-        // We use partialResponse to provide a chunk for TTS
         partialResponse += content;
-        // Emit last partial response and add complete response to userContext
+
         if (content.trim().slice(-1) === '•' || finishReason === 'stop') {
           const gptReply = {
             partialResponseIndex: this.partialResponseIndex,
-            partialResponse
+            partialResponse,
           };
 
           this.emit('gptreply', gptReply, interactionCount);
@@ -168,6 +124,7 @@ Do not act like a chatbot — sound like a capable human assistant.`
         }
       }
     }
+
     this.userContext.push({ role: 'assistant', content: completeResponse });
     console.log(`GPT -> user context length: ${this.userContext.length}`.green);
   }
