@@ -22,10 +22,22 @@ app.post('/webhook', async (req, res) => {
       gpt.completion(userInput, interactionCount).then(resolve);
     });
 
-    return res.json({ say: fullReply || 'Sorry, I didn’t catch that.' });
+    // 🔍 Basic keyword-based logic to decide if conversation is complete
+    const inputLower = userInput.toLowerCase();
+    const isComplete =
+      inputLower.includes('quote') &&
+      (inputLower.includes('trinidad') || inputLower.includes('barbados')) &&
+      inputLower.match(/(cleaning|product|export|shipping|suppl(ies|y))/) &&
+      inputLower.match(/(company|business|firm|group)/);
+
+    return res.json({
+      say: fullReply || 'Sorry, I didn’t catch that.',
+      done: isComplete
+    });
+
   } catch (error) {
     console.error('Error in webhook handler:', error);
-    return res.status(500).json({ say: 'Sorry, something went wrong.' });
+    return res.status(500).json({ say: 'Sorry, something went wrong.', done: false });
   }
 });
 
