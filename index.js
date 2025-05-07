@@ -1,3 +1,7 @@
+const express = require('express');
+const app = express();
+app.use(express.json());
+
 const { GptService } = require('./services/gpt-service');
 
 app.post('/webhook', async (req, res) => {
@@ -23,4 +27,9 @@ app.post('/webhook', async (req, res) => {
     console.error('Error in webhook handler:', error);
     return res.status(500).json({ say: 'Sorry, something went wrong.' });
   }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
 });
