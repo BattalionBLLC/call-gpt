@@ -10,9 +10,12 @@ app.post('/webhook', async (req, res) => {
     const gpt = new GptService();
 
     let fullReply = '';
+    let interactionCount = 1;
+
+    // ✅ Add logs INSIDE this block
+    console.log("USER INPUT:", userInput);
 
     await new Promise((resolve) => {
-      let interactionCount = 1;
       gpt.on('gptreply', (data) => {
         if (data.partialResponse) {
           fullReply += data.partialResponse;
@@ -22,33 +25,21 @@ app.post('/webhook', async (req, res) => {
       gpt.completion(userInput, interactionCount).then(resolve);
     });
 
-    // 🔍 Basic keyword-based logic to decide if conversation is complete
-    const inputLower = userInput.toLowerCase();
-const hasExportIntent = inputLower.includes('quote') || inputLower.includes('export');
-const hasDestination = inputLower.match(/trinidad|barbados|jamaica|dominican/i);
-const hasProduct = inputLower.match(/(bleach|cleaning|water|supplies|goods|cargo)/);
-const hasCompanyInfo = inputLower.match(/(company|business|supplies|group|limited)/);
-const hasContactInfo = inputLower.match(/\b\d{3}[-.\s]??\d{3}[-.\s]??\d{4}\b/);
+    const isComplete = false; // <-- Replace this with your actual logic or keep for forced looping
+    console.log("FULL REPLY:", fullReply);
+    console.log("IS COMPLETE:", isComplete);
 
-const isComplete = hasExportIntent && hasDestination && hasProduct && hasCompanyInfo && hasContactInfo;
-
-return res.json({
-  say: fullReply || 'Sorry, I didn’t catch that.',
-  done: isComplete
-});
-
-
+    return res.json({
+      say: fullReply || 'Sorry, I didn’t catch that.',
+      done: isComplete
+    });
   } catch (error) {
     console.error('Error in webhook handler:', error);
-    return res.status(500).json({ say: 'Sorry, something went wrong.', done: false });
+    return res.status(500).json({ say: 'Sorry, something went wrong.' });
   }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
-console.log("USER INPUT:", userInput);
-console.log("IS COMPLETE?", isComplete);
-console.log("RESPONSE:", fullReply);
-
 });
