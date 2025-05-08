@@ -58,6 +58,22 @@ Add a '•' symbol every 5–10 words at natural pauses to allow for text-to-spe
     }
   }
 
+loadSession(sessionId) {
+  const fs = require('fs');
+  const path = `./transcripts/session-${sessionId}.json`;
+  if (fs.existsSync(path)) {
+    try {
+      const raw = fs.readFileSync(path);
+      const parsed = JSON.parse(raw);
+      this.userContext = parsed;
+      console.log(`🔁 Loaded session from ${path}`);
+    } catch (e) {
+      console.error('⚠️ Failed to load session:', e);
+    }
+  }
+}
+
+
   updateUserContext(name, role, text) {
     if (name !== 'user') {
       this.userContext.push({ role, name, content: text });
