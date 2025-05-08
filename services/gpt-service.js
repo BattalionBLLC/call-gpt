@@ -2,9 +2,9 @@
 require('colors');
 const EventEmitter = require('events');
 const OpenAI = require('openai');
-const tools = require('../functions/function-manifest');
 const fs = require('fs');
 const path = require('path');
+const tools = require('../functions/function-manifest');
 
 // Import all functions included in function manifest
 const availableFunctions = {};
@@ -14,9 +14,12 @@ tools.forEach((tool) => {
 });
 
 class GptService extends EventEmitter {
-  constructor() {
+  constructor(sessionId = null) {
     super();
     this.openai = new OpenAI();
+    this.sessionId = sessionId || 'session-default';
+    this.transcriptPath = path.join(__dirname, `../transcripts/${this.sessionId}.json`);
+
     this.userContext = [
       {
         role: 'system',
@@ -38,6 +41,8 @@ Add a '•' symbol every 5–10 words at natural pauses to allow for text-to-spe
       }
     ];
     this.partialResponseIndex = 0;
+
+    this.loadSession();
   }
 
   setCallSid(callSid) {
@@ -58,43 +63,31 @@ Add a '•' symbol every 5–10 words at natural pauses to allow for text-to-spe
     }
   }
 
-loadSession(sessionId) {
-  const fs = require('fs');
-  const path = `./transcripts/session-${sessionId}.json`;
-  if (fs.existsSync(path)) {
-    try {
-      const raw = fs.readFileSync(path);
-      const parsed = JSON.parse(raw);
-      this.userContext = parsed;
-      console.log(`🔁 Loaded session from ${path}`);
-    } catch (e) {
-      console.error('⚠️ Failed to load session:', e);
-    }
-  }
-}
-
-
   updateUserContext(name, role, text) {
-    if (name !== 'user') {
-      this.userContext.push({ role, name, content: text });
-    } else {
-      this.userContext.push({ role, content: text });
+    const entry = name !== 'user'
+      ? { role, name, content: text }
+      : { role, content: text };
+    this.userContext.push(entry);
+  }
+
+  saveSession() {
+    try {
+      const dir = path.dirname(this.transcriptPath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(this.transcriptPath, JSON.stringify(this.userContext, null, 2));
+    } catch (error) {
+      console.error('Failed to save session:', error);
     }
   }
 
-  saveSession(sessionId) {
-    const dir = path.join(__dirname, '..', 'transcripts');
-    const filePath = path.join(dir, `session-${sessionId}.json`);
-
+  loadSession() {
     try {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      if (fs.existsSync(this.transcriptPath)) {
+        const data = fs.readFileSync(this.transcriptPath, 'utf8');
+        this.userContext = JSON.parse(data);
       }
-
-      fs.writeFileSync(filePath, JSON.stringify(this.userContext, null, 2));
-      console.log(`Session saved to ${filePath}`.blue);
-    } catch (err) {
-      console.error('Failed to save session:', err);
+    } catch (error) {
+      console.error('Failed to load session:', error);
     }
   }
 
@@ -164,6 +157,7 @@ loadSession(sessionId) {
     }
 
     this.userContext.push({ role: 'assistant', content: completeResponse });
+    this.saveSession();
     console.log(`GPT -> user context length: ${this.userContext.length}`.green);
   }
 }
