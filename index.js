@@ -47,4 +47,8 @@ return res.json({
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
+console.log("USER INPUT:", userInput);
+console.log("IS COMPLETE?", isComplete);
+console.log("RESPONSE:", fullReply);
+
 });
