@@ -1,7 +1,10 @@
+
 require('colors');
 const EventEmitter = require('events');
 const OpenAI = require('openai');
 const tools = require('../functions/function-manifest');
+const fs = require('fs');
+const path = require('path');
 
 // Import all functions included in function manifest
 const availableFunctions = {};
@@ -11,14 +14,16 @@ tools.forEach((tool) => {
 });
 
 class GptService extends EventEmitter {
-  constructor() {
+  constructor(sessionId) {
     super();
+    this.sessionId = sessionId || 'default';
+    this.sessionFilePath = path.join(__dirname, `../transcripts/session-${this.sessionId}.json`);
     this.openai = new OpenAI();
-    this.userContext = [
+    this.userContext = this.loadSession() || [
       {
         role: 'system',
         content: `You are Morgan, a polite and efficient virtual assistant for Battalion Logistics.
-You handle voice calls professionally, helping callers determine if they need import, export, logistics or procurement services.
+You handle voice calls professionally, helping callers determine if they need import/export logistics or procurement services.
 You always aim to:
 - Confirm the purpose of the call.
 - Extract meaningful information such as product type, origin location (not just caller location), destination, and urgency.
@@ -35,6 +40,25 @@ Add a '•' symbol every 5–10 words at natural pauses to allow for text-to-spe
       }
     ];
     this.partialResponseIndex = 0;
+  }
+
+  loadSession() {
+    if (fs.existsSync(this.sessionFilePath)) {
+      try {
+        return JSON.parse(fs.readFileSync(this.sessionFilePath, 'utf-8'));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  saveSession() {
+    try {
+      fs.writeFileSync(this.sessionFilePath, JSON.stringify(this.userContext, null, 2));
+    } catch (err) {
+      console.error('Failed to save session:', err);
+    }
   }
 
   setCallSid(callSid) {
@@ -129,6 +153,7 @@ Add a '•' symbol every 5–10 words at natural pauses to allow for text-to-spe
     }
 
     this.userContext.push({ role: 'assistant', content: completeResponse });
+    this.saveSession();
     console.log(`GPT -> user context length: ${this.userContext.length}`.green);
   }
 }
