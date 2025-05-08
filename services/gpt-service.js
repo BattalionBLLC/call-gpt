@@ -1,6 +1,8 @@
 require('colors');
 const EventEmitter = require('events');
 const OpenAI = require('openai');
+const fs = require('fs');
+const path = require('path');
 const tools = require('../functions/function-manifest');
 
 // Import all functions included in function manifest
@@ -18,7 +20,7 @@ class GptService extends EventEmitter {
       {
         role: 'system',
         content: `You are Morgan, a polite and efficient virtual assistant for Battalion Logistics.
-You handle voice calls professionally, helping callers determine if they need import/export logistics or procurement services.
+You handle voice calls professionally, helping callers determine if they are a current customer or need import, export, logistics or procurement services. 
 You always aim to:
 - Confirm the purpose of the call.
 - Extract meaningful information such as product type, origin location (not just caller location), destination, and urgency.
@@ -130,7 +132,17 @@ Add a '•' symbol every 5–10 words at natural pauses to allow for text-to-spe
 
     this.userContext.push({ role: 'assistant', content: completeResponse });
     console.log(`GPT -> user context length: ${this.userContext.length}`.green);
+
+    // 🔽 Log transcript to file
+    try {
+      const logDir = path.join(__dirname, '..', 'logs');
+      fs.mkdirSync(logDir, { recursive: true });
+      const fileName = `log_${Date.now()}.json`;
+      const filePath = path.join(logDir, fileName);
+      fs.writeFileSync(filePath, JSON.stringify(this.userContext, null, 2));
+      console.log(`📝 Call transcript saved to ${filePath}`.blue);
+    } catch (err) {
+      console.error('Failed to save transcript:', err);
+    }
   }
 }
-
-module.exports = { GptService };
