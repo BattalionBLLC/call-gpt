@@ -11,6 +11,8 @@ app.post('/webhook', async (req, res) => {
   try {
     const userInput = req.body.user_input || '';
     const gpt = new GptService();
+gpt.loadSession(sessionId); // 🧠 Load memory before responding
+
 
     let fullReply = '';
     let interactionCount = 1;
