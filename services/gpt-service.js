@@ -14,12 +14,10 @@ tools.forEach((tool) => {
 });
 
 class GptService extends EventEmitter {
-  constructor(sessionId) {
+  constructor() {
     super();
-    this.sessionId = sessionId || 'default';
-    this.sessionFilePath = path.join(__dirname, `../transcripts/session-${this.sessionId}.json`);
     this.openai = new OpenAI();
-    this.userContext = this.loadSession() || [
+    this.userContext = [
       {
         role: 'system',
         content: `You are Morgan, a polite and efficient virtual assistant for Battalion Logistics.
@@ -40,25 +38,6 @@ Add a '•' symbol every 5–10 words at natural pauses to allow for text-to-spe
       }
     ];
     this.partialResponseIndex = 0;
-  }
-
-  loadSession() {
-    if (fs.existsSync(this.sessionFilePath)) {
-      try {
-        return JSON.parse(fs.readFileSync(this.sessionFilePath, 'utf-8'));
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  }
-
-  saveSession() {
-    try {
-      fs.writeFileSync(this.sessionFilePath, JSON.stringify(this.userContext, null, 2));
-    } catch (err) {
-      console.error('Failed to save session:', err);
-    }
   }
 
   setCallSid(callSid) {
@@ -84,6 +63,22 @@ Add a '•' symbol every 5–10 words at natural pauses to allow for text-to-spe
       this.userContext.push({ role, name, content: text });
     } else {
       this.userContext.push({ role, content: text });
+    }
+  }
+
+  saveSession(sessionId) {
+    const dir = path.join(__dirname, '..', 'transcripts');
+    const filePath = path.join(dir, `session-${sessionId}.json`);
+
+    try {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      fs.writeFileSync(filePath, JSON.stringify(this.userContext, null, 2));
+      console.log(`Session saved to ${filePath}`.blue);
+    } catch (err) {
+      console.error('Failed to save session:', err);
     }
   }
 
@@ -153,7 +148,6 @@ Add a '•' symbol every 5–10 words at natural pauses to allow for text-to-spe
     }
 
     this.userContext.push({ role: 'assistant', content: completeResponse });
-    this.saveSession();
     console.log(`GPT -> user context length: ${this.userContext.length}`.green);
   }
 }
