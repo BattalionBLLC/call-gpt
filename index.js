@@ -1,8 +1,11 @@
 const express = require('express');
-const app = express();
-app.use(express.json());
+const fs = require('fs');
+const path = require('path');
 
 const { GptService } = require('./services/gpt-service');
+
+const app = express();
+app.use(express.json());
 
 app.post('/webhook', async (req, res) => {
   try {
