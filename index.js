@@ -24,16 +24,19 @@ app.post('/webhook', async (req, res) => {
 
     // 🔍 Basic keyword-based logic to decide if conversation is complete
     const inputLower = userInput.toLowerCase();
-    const isComplete =
-      inputLower.includes('quote') &&
-      (inputLower.includes('trinidad') || inputLower.includes('barbados')) &&
-      inputLower.match(/(cleaning|product|export|shipping|suppl(ies|y))/) &&
-      inputLower.match(/(company|business|firm|group)/);
+const hasExportIntent = inputLower.includes('quote') || inputLower.includes('export');
+const hasDestination = inputLower.match(/trinidad|barbados|jamaica|dominican/i);
+const hasProduct = inputLower.match(/(bleach|cleaning|water|supplies|goods|cargo)/);
+const hasCompanyInfo = inputLower.match(/(company|business|supplies|group|limited)/);
+const hasContactInfo = inputLower.match(/\b\d{3}[-.\s]??\d{3}[-.\s]??\d{4}\b/);
 
-    return res.json({
-      say: fullReply || 'Sorry, I didn’t catch that.',
-      done: isComplete
-    });
+const isComplete = hasExportIntent && hasDestination && hasProduct && hasCompanyInfo && hasContactInfo;
+
+return res.json({
+  say: fullReply || 'Sorry, I didn’t catch that.',
+  done: isComplete
+});
+
 
   } catch (error) {
     console.error('Error in webhook handler:', error);
