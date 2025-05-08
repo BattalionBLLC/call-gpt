@@ -1,26 +1,25 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
-
-const { GptService } = require('./services/gpt-service');
-
 const app = express();
 app.use(express.json());
+
+const { GptService } = require('./services/gpt-service');
 
 app.post('/webhook', async (req, res) => {
   try {
     const userInput = req.body.user_input || '';
-    const gpt = new GptService();
-gpt.loadSession(sessionId); // 🧠 Load memory before responding
+    const sessionId = req.body.session_id || 'default';
 
+    console.log("USER INPUT:", userInput);
+    console.log("SESSION ID:", sessionId);
+
+    const gpt = new GptService();
+    gpt.loadSession(sessionId); // 🧠 Load session memory
+    gpt.sessionId = sessionId;  // 💾 Save transcript path later
 
     let fullReply = '';
-    let interactionCount = 1;
-
-    // ✅ Add logs INSIDE this block
-    console.log("USER INPUT:", userInput);
 
     await new Promise((resolve) => {
+      let interactionCount = 1;
       gpt.on('gptreply', (data) => {
         if (data.partialResponse) {
           fullReply += data.partialResponse;
@@ -30,14 +29,7 @@ gpt.loadSession(sessionId); // 🧠 Load memory before responding
       gpt.completion(userInput, interactionCount).then(resolve);
     });
 
-    const isComplete = false; // <-- Replace this with your actual logic or keep for forced looping
-    console.log("FULL REPLY:", fullReply);
-    console.log("IS COMPLETE:", isComplete);
-
-    return res.json({
-      say: fullReply || 'Sorry, I didn’t catch that.',
-      done: isComplete
-    });
+    return res.json({ say: fullReply || 'Sorry, I didn’t catch that.' });
   } catch (error) {
     console.error('Error in webhook handler:', error);
     return res.status(500).json({ say: 'Sorry, something went wrong.' });
