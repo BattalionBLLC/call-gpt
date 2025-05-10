@@ -7,14 +7,13 @@ const { GptService } = require('./services/gpt-service');
 app.post('/webhook', async (req, res) => {
   try {
     const userInput = req.body.user_input || '';
-    const sessionId = req.body.session_id || 'default';
+    const sessionId = req.body.session_id || 'session-default';
 
     console.log("USER INPUT:", userInput);
     console.log("SESSION ID:", sessionId);
 
     const gpt = new GptService();
-    gpt.loadSession(sessionId); // 🧠 Load session memory
-    gpt.sessionId = sessionId;  // 💾 Save transcript path later
+    gpt.setSessionId(sessionId); // 🆕 enables session memory
 
     let fullReply = '';
 
