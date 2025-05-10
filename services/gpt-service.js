@@ -1,11 +1,11 @@
 require('colors');
-const fs = require('fs');
-const path = require('path');
 const EventEmitter = require('events');
 const OpenAI = require('openai');
+const fs = require('fs');
+const path = require('path');
 const tools = require('../functions/function-manifest');
 
-// Load all available tool functions
+// Import all functions included in function manifest
 const availableFunctions = {};
 tools.forEach((tool) => {
   let functionName = tool.function.name;
@@ -13,78 +13,53 @@ tools.forEach((tool) => {
 });
 
 class GptService extends EventEmitter {
-  constructor(sessionId = 'session-default') {
+  constructor() {
     super();
-    this.sessionFile = path.join(__dirname, `../transcripts/${sessionId}.json`);
     this.openai = new OpenAI();
-
-    this.userContext = this.loadSession() || [
+    this.partialResponseIndex = 0;
+    this.sessionId = 'default';
+    this.userContext = [
       {
         role: 'system',
-        content: `You are Morgan, a polite, efficient logistics assistant for Battalion Logistics. 
-You assist with import, export, shipping, and procurement. 
+        content: `You are Morgan, a polite and efficient virtual assistant for Battalion Logistics.
+You handle voice calls professionally, helping callers determine if they need import/export logistics or procurement services.
 You always aim to:
-- Confirm the purpose of the call is within the scope of the services provided by Battalion Logistics.
-- Ensure calls do not exceed 5 minutes. Wrap up all calls over 5 minutes with polite summary.
-- Quantity or volume of shipment.
-- Collect product type, origin city and state, destination city and state, urgency.
-- Capture caller name, company name, email address and callback number.
-- Repeat the number back for confirmation.
-- Handle sales or spam calls politely and end them quickly.
-- gracefully end the call when appropriate. Do a simple recap of what is needed from the caller, Inform caller that the information will be sent to the Battalion Logistics team.
-- Individuals that work at Battalion Logistics are currently working on other customer issues and currently unavailable. Capture callback information and reason for calling.
-- Trucking companies looking for loads or looking to set up with Battalion Logistics can send email their carrier package to loads@battalionlogistics.com.
-- Target customer likely needs wholesale quantities of various products, or shipping containers full, FTL or LTL volume of products. Either by scale or volume. Customer needs these items acquired and relocated from origin to destination essentially hands off. They will need Battalion Logistics to find it and move it.
--Battalion Logistics also offers the following as an affiliate: ShipBob check battalionlogistics.com/shipbob, Easyship check battalionlogistics.com/easyship, Freightos check battalionlogistics.com/freightos, Payoneer check battalionlogistics.com/payoneer and Next Insurance check battalionlogistics.com/next-insurance. Refer online for relevant selling points if caller is not appropriate for Battalion Logistics. Offer to text relevant Promotional Link to affiliate
--Morgan works for Battalion Logistics and can be helpful to callers, but must maintain focus and reach the objective on each call.
-Your responses are brief, helpful, and professional. 
-Add a '•' symbol every 5–10 words at natural pauses to improve text-to-speech clarity. ask only 2-3 questions at a time`
+- Confirm the purpose of the call.
+- Extract meaningful information such as product type, origin location (not just caller location), destination, and urgency.
+- Capture caller's name, company name, and callback number.
+- Repeat the callback number back for clarity.
+- End sales calls or irrelevant inquiries politely but firmly.
+
+Use clear, friendly language with short responses and a professional tone.
+Add a '•' symbol every 5–10 words at natural pauses to allow for text-to-speech breaks.`
       },
       {
         role: 'assistant',
         content: `Hi, this is Morgan with Battalion Logistics. • How can I assist you today?`
       }
     ];
-
-    this.partialResponseIndex = 0;
   }
 
-  // Load session memory if it exists
-  loadSession() {
-    try {
-      if (fs.existsSync(this.sessionFile)) {
-        const content = fs.readFileSync(this.sessionFile, 'utf8');
-        return JSON.parse(content);
-      }
-    } catch (error) {
-      console.error('Error loading session:', error);
-    }
-    return null;
+  setSessionId(sessionId) {
+    this.sessionId = sessionId || 'default';
   }
 
-  // Save session memory
   saveSession() {
-    try {
-      const dir = path.dirname(this.sessionFile);
-      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(this.sessionFile, JSON.stringify(this.userContext, null, 2));
-    } catch (error) {
-      console.error('Failed to save session:', error);
+    const dir = path.join(__dirname, '..', 'transcripts');
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir);
     }
-  }
 
-  setCallSid(callSid) {
-    this.userContext.push({
-      role: 'system',
-      content: `callSid: ${callSid}`
-    });
+    const filePath = path.join(dir, `session-${this.sessionId}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(this.userContext, null, 2));
+    console.log(`📁 Transcription saved: ${filePath}`.cyan);
   }
 
   validateFunctionArgs(args) {
     try {
       return JSON.parse(args);
     } catch (error) {
-      console.warn('Invalid JSON in function arguments:', args);
+      console.log('Warning: Double function arguments returned by OpenAI:', args);
       if (args.indexOf('{') !== args.lastIndexOf('{')) {
         return JSON.parse(args.substring(args.indexOf('{'), args.indexOf('}') + 1));
       }
@@ -108,7 +83,7 @@ Add a '•' symbol every 5–10 words at natural pauses to improve text-to-speec
       tools: tools,
       stream: true,
       max_tokens: 200,
-      temperature: 0.7
+      temperature: 0.7,
     });
 
     let completeResponse = '';
@@ -117,43 +92,47 @@ Add a '•' symbol every 5–10 words at natural pauses to improve text-to-speec
     let functionArgs = '';
     let finishReason = '';
 
-    const collectToolInformation = (deltas) => {
-      let name = deltas.tool_calls?.[0]?.function?.name || '';
-      let args = deltas.tool_calls?.[0]?.function?.arguments || '';
+    function collectToolInformation(deltas) {
+      let name = deltas.tool_calls[0]?.function?.name || '';
       if (name) functionName = name;
+      let args = deltas.tool_calls[0]?.function?.arguments || '';
       if (args) functionArgs += args;
-    };
+    }
 
     for await (const chunk of stream) {
       let content = chunk.choices[0]?.delta?.content || '';
       let deltas = chunk.choices[0].delta;
       finishReason = chunk.choices[0].finish_reason;
 
-      if (deltas.tool_calls) collectToolInformation(deltas);
+      if (deltas.tool_calls) {
+        collectToolInformation(deltas);
+      }
 
       if (finishReason === 'tool_calls') {
-        const toolData = tools.find(tool => tool.function.name === functionName);
-        const say = toolData.function.say;
         const functionToCall = availableFunctions[functionName];
         const validatedArgs = this.validateFunctionArgs(functionArgs);
+
+        const toolData = tools.find(tool => tool.function.name === functionName);
+        const say = toolData.function.say;
 
         this.emit('gptreply', {
           partialResponseIndex: null,
           partialResponse: say
         }, interactionCount);
 
-        const functionResponse = await functionToCall(validatedArgs);
+        let functionResponse = await functionToCall(validatedArgs);
         this.updateUserContext(functionName, 'function', functionResponse);
         await this.completion(functionResponse, interactionCount, 'function', functionName);
       } else {
         completeResponse += content;
         partialResponse += content;
 
-        if (content.trim().endsWith('•') || finishReason === 'stop') {
+        if (content.trim().slice(-1) === '•' || finishReason === 'stop') {
           this.emit('gptreply', {
             partialResponseIndex: this.partialResponseIndex,
             partialResponse
           }, interactionCount);
+
           this.partialResponseIndex++;
           partialResponse = '';
         }
