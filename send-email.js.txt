@@ -1,0 +1,19 @@
+// send-email.js
+const sgMail = require('@sendgrid/mail');
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+const msg = {
+  to: 'mworrell@battalionlogistics.com', // replace with your email
+  from: 'morgan@battalionlogistics.com', // must match verified sender/domain
+  subject: 'Test Email from Morgan',
+  text: 'This is a test email to confirm your SendGrid setup is working.',
+};
+
+sgMail
+  .send(msg)
+  .then(() => {
+    console.log('✅ Email sent successfully!');
+  })
+  .catch((error) => {
+    console.error('❌ Email failed:', error.response?.body || error);
+  });
