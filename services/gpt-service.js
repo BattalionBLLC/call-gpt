@@ -133,7 +133,7 @@ Your responses are brief, helpful, and professional. Add a '•' symbol every 5�
         completeResponse += content;
         partialResponse += content;
 
-        if (content.trim().slice(-1) === '•' || finishReason === 'stop') {
+        if (content.includes('•') || finishReason === 'stop') {
           this.emit('gptreply', {
             partialResponseIndex: this.partialResponseIndex,
             partialResponse
