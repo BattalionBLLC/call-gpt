@@ -85,11 +85,11 @@ Your responses are brief, helpful, and professional. Add a 'â€¢' symbol every 5â
 
     const stream = await this.openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
-      messages: this.userContext,
+      messages: this.userContext.slice(-10),
       tools: tools,
       stream: true,
-      max_tokens: 200,
-      temperature: 0.7,
+      max_tokens: 100,
+      temperature: 0.4,
     });
 
     let completeResponse = '';
